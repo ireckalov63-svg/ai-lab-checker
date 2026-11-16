@@ -1,0 +1,15 @@
+public class Main {
+    public static void main(String[] args) {
+        int[] values = {4, 8, 2, 6, 10};
+        int total = 0;
+        int biggest = values[0];
+        for (int k = 0; k < values.length; k++) {
+            total = total + values[k];
+            if (values[k] > biggest) {
+                biggest = values[k];
+            }
+        }
+        System.out.println("Сумма: " + total);
+        System.out.println("Максимум: " + biggest);
+    }
+}
