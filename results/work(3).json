@@ -1,0 +1,43 @@
+{
+  "criteria": [
+    {
+      "number": 1,
+      "done": true,
+      "comment": ""
+    },
+    {
+      "number": 2,
+      "done": true,
+      "comment": ""
+    },
+    {
+      "number": 3,
+      "done": true,
+      "comment": ""
+    },
+    {
+      "number": 4,
+      "done": true,
+      "comment": ""
+    },
+    {
+      "number": 5,
+      "done": true,
+      "comment": ""
+    },
+    {
+      "number": 6,
+      "done": true,
+      "comment": ""
+    },
+    {
+      "number": 7,
+      "done": true,
+      "comment": ""
+    }
+  ],
+  "recommendations": [
+    "В цикле for нужно изменить условие на `i < numbers.length` для корректного обхода всех элементов массива.",
+    "Названия переменных понятные, все критерии выполнены."
+  ]
+}

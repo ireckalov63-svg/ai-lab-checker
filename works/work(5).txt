@@ -9,6 +9,5 @@ public class Main {
                 max = numbers[i];
             }
         }
-        // результат нигде не выводится
     }
 }
