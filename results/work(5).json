@@ -1,0 +1,43 @@
+{
+  "criteria": [
+    {
+      "number": 1,
+      "done": true,
+      "comment": ""
+    },
+    {
+      "number": 2,
+      "done": true,
+      "comment": ""
+    },
+    {
+      "number": 3,
+      "done": true,
+      "comment": ""
+    },
+    {
+      "number": 4,
+      "done": true,
+      "comment": ""
+    },
+    {
+      "number": 5,
+      "done": true,
+      "comment": ""
+    },
+    {
+      "number": 6,
+      "done": false,
+      "comment": "Не выводится результат на экран."
+    },
+    {
+      "number": 7,
+      "done": false,
+      "comment": "Переменные названы понятно, но результат не выводится."
+    }
+  ],
+  "recommendations": [
+    "Добавьте вывод суммы и максимума на экран с помощью команды `System.out.println`.",
+    "Пример: `System.out.println(\"Сумма: \" + sum + \", Максимум: \" + max);`"
+  ]
+}

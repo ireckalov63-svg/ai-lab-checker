@@ -1,30 +1,74 @@
+"""
+batch_check.py — пакетная проверка лабораторных работ через локальную LLM.
+Требует: pip install -U ollama pydantic
+Опционально: pip install python-docx pypdf
+"""
+
 import os
 import time
 from pathlib import Path
 
 import ollama
+from pydantic import BaseModel, Field, field_validator
+
 
 # ============================================================
 # Настройки
 # ============================================================
-FOLDER       = "./works"
-MODEL        = "qwen2.5:7b"
-RESULTS_DIR  = "./results"
+FOLDER        = "./works"
+MODEL         = "qwen2.5:7b"
+RESULTS_DIR   = "./results"
 REQUEST_DELAY = 0.0
+MAX_RETRIES   = 2
 
-# Какие расширения берём. Для каждого — свой ридер (см. ниже).
 EXTENSIONS = {
-    ".txt", ".md",                         # plain text
-    ".py", ".java", ".c", ".cpp", ".cs",   # исходники — тоже текст
-    ".docx",                               # нужен python-docx
-    ".pdf",                                # нужен pypdf
+    ".txt", ".md",
+    ".py", ".java", ".c", ".cpp", ".cs",
+    ".docx",
+    ".pdf",
 }
 
+
+# ============================================================
+# Схема ответа модели
+# ============================================================
+class Criterion(BaseModel):
+    number: int = Field(ge=1, le=7, description="Номер критерия, 1..7")
+    done: bool = Field(description="True если критерий выполнен, иначе False")
+    comment: str = Field(description="Одно короткое предложение — почему так")
+
+
+class WorkCheck(BaseModel):
+    criteria: list[Criterion] = Field(
+        min_length=7, max_length=7,
+        description="Ровно 7 критериев — по одному на каждый пункт из задания",
+    )
+    recommendations: list[str] = Field(
+        min_length=2, max_length=3,
+        description="2-3 конкретных пункта, что студенту исправить",
+    )
+
+    @field_validator("criteria")
+    @classmethod
+    def _check_criteria_numbers(cls, v):
+        numbers = sorted(c.number for c in v)
+        if numbers != list(range(1, 8)):
+            raise ValueError(f"Номера критериев должны покрывать 1..7, получено {numbers}")
+        return v
+
+    @property
+    def verdict(self) -> str:
+        return "готово" if all(c.done for c in self.criteria) else "доработать"
+
+
+# ============================================================
+# Промпт (без инструкций по формату — их задаёт схема)
+# ============================================================
 PROMPT_TEMPLATE = """Ты помощник преподавателя по программированию. Проверь работу студента.
- 
+
 Задача: найти в массиве [4, 8, 2, 6, 10] самое большое число и посчитать сумму всех чисел.
 Верный ответ: сумма 30, максимум 10.
- 
+
 Критерии:
 1. Программа запускается без ошибок.
 2. Массив создан и заполнен.
@@ -33,21 +77,18 @@ PROMPT_TEMPLATE = """Ты помощник преподавателя по пр�
 5. Максимум найден верно.
 6. Результат выводится на экран.
 7. Названия переменных понятные.
- 
-По каждому критерию напиши: номер, «выполнено» или «не выполнено» и одно
-короткое предложение, почему. Потом напиши вердикт: «готово к сдаче» или «доработать».
-В конце напиши, что студенту исправить (2-3 пункта).
-Не придумывай ошибок, которых нет. Отвечай по-русски, просто.
- 
+
+Не придумывай ошибок, которых нет. Пиши по-русски, коротко.
+Комментарии и рекомендации — на русском языке.
+
 Код студента:
 {content}
 """
 
+
 # ============================================================
 # Чтение файлов
 # ============================================================
-
-# Расширения, которые читаются как обычный текст
 _PLAIN_TEXT_EXT = {
     ".txt", ".md", ".rst",
     ".py", ".java", ".c", ".cpp", ".h", ".hpp", ".cs",
@@ -58,50 +99,39 @@ _PLAIN_TEXT_EXT = {
 
 
 def _read_plain(path: Path) -> str:
-    """Читаем как текст, аккуратно перебирая кодировки."""
-    # utf-8-sig — чтобы BOM не попал в начало строки (частая проблема с Windows)
     for enc in ("utf-8-sig", "utf-8", "cp1251", "latin-1"):
         try:
             return path.read_text(encoding=enc)
         except UnicodeDecodeError:
             continue
-    # latin-1 не падает никогда — сюда дойдём только при странных файлах
     return path.read_text(encoding="latin-1", errors="replace")
 
 
 def _read_docx(path: Path) -> str:
-    """Текст из .docx (абзацы + таблицы)."""
     try:
         from docx import Document
     except ImportError as e:
         raise RuntimeError("Нужен python-docx: pip install python-docx") from e
-
     doc = Document(str(path))
-    parts: list[str] = []
-
+    parts = []
     for para in doc.paragraphs:
         if para.text.strip():
             parts.append(para.text)
-
-    # Таблицы часто содержат данные/результаты — их тоже вытаскиваем
     for table in doc.tables:
         for row in table.rows:
             cells = [c.text.strip() for c in row.cells]
             if any(cells):
                 parts.append(" | ".join(cells))
-
     return "\n".join(parts)
 
 
 def _read_pdf(path: Path) -> str:
-    """Текст из .pdf. Сканы без OCR слоя вернут пустоту — это нормально."""
     try:
         from pypdf import PdfReader
     except ImportError as e:
         raise RuntimeError("Нужен pypdf: pip install pypdf") from e
-
     reader = PdfReader(str(path))
-    pages: list[str] = []
+    pages = []
     for page in reader.pages:
         text = page.extract_text() or ""
         if text.strip():
@@ -110,30 +140,63 @@ def _read_pdf(path: Path) -> str:
 
 
 def read_text_from_file(path: str | Path) -> str:
-    """Единая точка входа: выбирает ридер по расширению."""
     p = Path(path)
     ext = p.suffix.lower()
-
     if ext in _PLAIN_TEXT_EXT:
         return _read_plain(p)
     if ext == ".docx":
         return _read_docx(p)
     if ext == ".pdf":
         return _read_pdf(p)
-
     raise ValueError(f"Неподдерживаемый формат: {ext}")
 
 
 # ============================================================
-# Работа с моделью
+# Модель
 # ============================================================
-def ask_model(model: str, prompt: str) -> str:
-    response = ollama.chat(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        # options={"temperature": 0, "num_predict": 1024},
+def ask_model(model: str, prompt: str) -> WorkCheck:
+    """Запрос к Ollama со структурированным ответом. Ретраит при невалидном JSON."""
+    last_err: Exception | None = None
+    current_prompt = prompt
+
+    for attempt in range(MAX_RETRIES + 1):
+        response = ollama.chat(
+            model=model,
+            messages=[{"role": "user", "content": current_prompt}],
+            format=WorkCheck.model_json_schema(),   # ← гарантия формата
+            options={"temperature": 0, "num_predict": 1024},
+        )
+        raw = response["message"]["content"]
+        try:
+            return WorkCheck.model_validate_json(raw)
+        except Exception as e:
+            last_err = e
+            print(f"    ↻ попытка {attempt + 1}: невалидный ответ ({e})")
+            current_prompt = (
+                prompt
+                + f"\n\nПредыдущий ответ не прошёл проверку схемы: {e}. "
+                  "Верни строго по заданной схеме."
+            )
+
+    raise RuntimeError(
+        f"Модель не вернула валидный ответ после {MAX_RETRIES + 1} попыток: {last_err}"
     )
-    return response["message"]["content"]
+
+
+# ============================================================
+# Человекочитаемый отчёт
+# ============================================================
+def format_report(file_name: str, result: WorkCheck) -> str:
+    lines = [f"Файл: {file_name}", ""]
+    for c in result.criteria:
+        mark = "✓" if c.done else "✗"
+        lines.append(f"{mark} {c.number}. {c.comment}")
+    lines.append("")
+    lines.append(f"Вердикт: {result.verdict}")
+    lines.append("Что исправить:")
+    for r in result.recommendations:
+        lines.append(f"  • {r}")
+    return "\n".join(lines)
 
 
 # ============================================================
@@ -168,24 +231,30 @@ def main() -> None:
             continue
 
         if not content.strip():
-            print("  ⚠ текст не извлечён (пустой файл или PDF-скан без OCR), пропуск")
+            print("  ⚠ текст не извлечён, пропуск")
             continue
 
         prompt = PROMPT_TEMPLATE.replace("{content}", content)
 
         t0 = time.time()
         try:
-            answer = ask_model(MODEL, prompt)
+            result = ask_model(MODEL, prompt)
         except Exception as e:
             print(f"  ✗ ошибка модели: {e}")
             continue
         dt = time.time() - t0
 
-        print(f"  ✓ ответ за {dt:.1f} с, {len(content)} симв. на входе, "
-              f"{len(answer)} на выходе")
+        done_count = sum(1 for c in result.criteria if c.done)
+        print(f"  ✓ за {dt:.1f} с — критериев выполнено {done_count}/7, "
+              f"вердикт: {result.verdict}")
 
-        out_path = Path(RESULTS_DIR) / f"{file_path.stem}.txt"
-        out_path.write_text(answer, encoding="utf-8")
+        # JSON — машинно-читаемо (пригодится для сводных таблиц)
+        json_path = Path(RESULTS_DIR) / f"{file_path.stem}.json"
+        json_path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
+
+        # TXT — для чтения глазами
+        txt_path = Path(RESULTS_DIR) / f"{file_path.stem}.txt"
+        txt_path.write_text(format_report(file_path.name, result), encoding="utf-8")
 
         if REQUEST_DELAY:
             time.sleep(REQUEST_DELAY)
