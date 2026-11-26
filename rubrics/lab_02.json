@@ -1,0 +1,14 @@
+{
+  "id": "lab_02",
+  "title": "Работа со строками",
+  "description": "Подсчёт гласных букв в строке",
+  "task": "Написать программу, которая считает количество гласных букв в строке «Hello World». Верный ответ: 3.",
+  "allowed_formats": [".py", ".java", ".txt"],
+  "criteria": [
+    {"id": 1, "text": "Программа запускается без ошибок", "is_critical": true, "auto": "compiles"},
+    {"id": 2, "text": "Строка задана в коде", "is_critical": true},
+    {"id": 3, "text": "Гласные буквы подсчитаны верно", "is_critical": true, "requires_compile": true},
+    {"id": 4, "text": "Результат выводится на экран", "is_critical": true},
+    {"id": 5, "text": "Названия переменных понятные", "is_critical": false}
+  ]
+}

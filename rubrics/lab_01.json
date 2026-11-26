@@ -1,0 +1,16 @@
+{
+  "id": "lab_01",
+  "title": "Работа с массивами",
+  "description": "Поиск максимума и суммы элементов массива",
+  "task": "Найти в массиве {4, 8, 2, 6, 10} максимальное число и сумму всех чисел. Верный ответ: сумма 30, максимум 10.",
+  "allowed_formats": [".py", ".java", ".txt", ".md"],
+  "criteria": [
+    {"id": 1, "text": "Программа запускается без ошибок", "is_critical": true, "auto": "compiles"},
+    {"id": 2, "text": "Массив создан и заполнен", "is_critical": true},
+    {"id": 3, "text": "Для обхода массива используется цикл", "is_critical": false},
+    {"id": 4, "text": "Сумма посчитана верно", "is_critical": true, "requires_compile": true},
+    {"id": 5, "text": "Максимум найден верно", "is_critical": true, "requires_compile": true},
+    {"id": 6, "text": "Результат выводится на экран", "is_critical": true},
+    {"id": 7, "text": "Названия переменных понятные", "is_critical": false}
+  ]
+}
